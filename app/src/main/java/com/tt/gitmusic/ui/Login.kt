@@ -4,13 +4,14 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.tt.gitmusic.R
 import com.tt.gitmusic.databinding.ActivityLoginBinding
 import com.tt.gitmusic.model.AccessToken
-import getHttpLoggingInterceptor
+import com.tt.gitmusic.di.getHttpLoggingInterceptor
 import org.koin.android.ext.android.inject
-import provideOkHttpClient
+import com.tt.gitmusic.di.provideOkHttpClient
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -75,7 +76,7 @@ class Login : AppCompatActivity() {
                     }
                 })
             } else if (uri.getQueryParameter("error") != null) {
-                // show an error message here
+                Toast.makeText(this, "Login has problem", Toast.LENGTH_SHORT).show()
             }
         }
 

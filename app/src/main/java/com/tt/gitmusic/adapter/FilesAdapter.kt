@@ -34,9 +34,9 @@ class FilesAdapter(context: Context,
         holder.name.text = fileInBranch.path
 
         holder.itemView.setOnClickListener {
-            val position: Int = holder.adapterPosition
-            if (position != RecyclerView.NO_POSITION) {
-                holder.listener.onItemClick(position)
+            val adapterPos: Int = holder.adapterPosition
+            if (adapterPos != RecyclerView.NO_POSITION) {
+                holder.listener.onItemClick(adapterPos)
             }
         }
     }

@@ -3,4 +3,5 @@
     <string name="token">token</string>
     <string name="branch_name">Branch: %1$s</string>
     <string name="repo_name">Repo: %1$s</string>
+    <string name="pause">Pause</string>
 </resources>

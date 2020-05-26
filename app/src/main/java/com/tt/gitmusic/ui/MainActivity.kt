@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.tt.gitmusic.R
 import com.tt.gitmusic.adapter.ReposAdapter
 import com.tt.gitmusic.databinding.ActivityMainBinding
@@ -37,6 +38,7 @@ class MainActivity : AppCompatActivity() {
             Glide.with(this)
                     .load(it[0].owner.avatarUrl)
                     .circleCrop()
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .into(binding.avatar)
             binding.name.text = it[0].owner.login
 

@@ -1,7 +1,9 @@
+package com.tt.gitmusic.di
+
 import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.PreferenceManager
-import com.tt.gitmusic.service.GithubService
+import com.tt.gitmusic.dao.GithubDao
 import com.tt.gitmusic.viewmodel.GithubViewModel
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -15,7 +17,7 @@ val appComponent = module {
     factory { getHttpLoggingInterceptor() }
     factory { provideOkHttpClient(get()) }
     single { provideRetrofit() }
-    single { provideGithubService(get()) }
+    single { provideGithubDao(get()) }
     single { providesSharedPreferences(get()) }
     viewModel { GithubViewModel(get()) }
 }
@@ -48,7 +50,7 @@ fun providesSharedPreferences(application: Application): SharedPreferences {
     return PreferenceManager.getDefaultSharedPreferences(application)
 }
 
-fun provideGithubService(retrofit: Retrofit): GithubService {
+fun provideGithubDao(retrofit: Retrofit): GithubDao {
     return retrofit.create(
-            GithubService::class.java)
+            GithubDao::class.java)
 }

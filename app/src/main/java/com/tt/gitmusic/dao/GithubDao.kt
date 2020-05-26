@@ -1,4 +1,4 @@
-package com.tt.gitmusic.service
+package com.tt.gitmusic.dao
 
 import com.tt.gitmusic.model.BranchItem
 import com.tt.gitmusic.model.CommitDetail
@@ -10,7 +10,7 @@ import retrofit2.http.Header
 import retrofit2.http.Path
 import retrofit2.http.Url
 
-interface GithubService {
+interface GithubDao {
 
     @GET("user/repos")
     fun getUserRepos(@Header("Authorization") token: String): Call<List<UserRepo>>

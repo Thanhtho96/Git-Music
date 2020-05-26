@@ -7,13 +7,13 @@ import com.tt.gitmusic.model.BranchItem
 import com.tt.gitmusic.model.CommitDetail
 import com.tt.gitmusic.model.FileInBranch
 import com.tt.gitmusic.model.UserRepo
-import com.tt.gitmusic.service.GithubService
+import com.tt.gitmusic.dao.GithubDao
 import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class GithubViewModel(private val githubService: GithubService) : ViewModel() {
+class GithubViewModel(private val githubDao: GithubDao) : ViewModel() {
 
     var listRepos: MutableLiveData<List<UserRepo>> = MutableLiveData()
     var listBranches: MutableLiveData<List<BranchItem>> = MutableLiveData()
@@ -22,7 +22,7 @@ class GithubViewModel(private val githubService: GithubService) : ViewModel() {
 
     fun getUserRepos(token: String) {
         viewModelScope.launch {
-            githubService.getUserRepos(token).enqueue(object : Callback<List<UserRepo>> {
+            githubDao.getUserRepos(token).enqueue(object : Callback<List<UserRepo>> {
                 override fun onResponse(call: Call<List<UserRepo>>,
                                         response: Response<List<UserRepo>>) {
                     listRepos.value = response.body()
@@ -40,7 +40,7 @@ class GithubViewModel(private val githubService: GithubService) : ViewModel() {
                     userName: String,
                     repoName: String) {
         viewModelScope.launch {
-            githubService.getBranches(token, userName, repoName).enqueue(object : Callback<List<BranchItem>> {
+            githubDao.getBranches(token, userName, repoName).enqueue(object : Callback<List<BranchItem>> {
                 override fun onResponse(call: Call<List<BranchItem>>,
                                         response: Response<List<BranchItem>>) {
                     listBranches.value = response.body()
@@ -59,7 +59,7 @@ class GithubViewModel(private val githubService: GithubService) : ViewModel() {
                       repoName: String,
                       sha: String) {
         viewModelScope.launch {
-            githubService.getLastCommit(token, userName, repoName, sha).enqueue(object : Callback<CommitDetail> {
+            githubDao.getLastCommit(token, userName, repoName, sha).enqueue(object : Callback<CommitDetail> {
                 override fun onResponse(call: Call<CommitDetail>,
                                         response: Response<CommitDetail>) {
                     commitDetail.value = response.body()
@@ -76,7 +76,7 @@ class GithubViewModel(private val githubService: GithubService) : ViewModel() {
     fun getFileInBranch(token: String,
                         url: String) {
         viewModelScope.launch {
-            githubService.getFileInBranch(token, url).enqueue(object : Callback<FileInBranch> {
+            githubDao.getFileInBranch(token, url).enqueue(object : Callback<FileInBranch> {
                 override fun onResponse(call: Call<FileInBranch>,
                                         response: Response<FileInBranch>) {
                     fileInBranch.value = response.body()

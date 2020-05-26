@@ -2,7 +2,7 @@ package com.tt.gitmusic.ui
 
 import android.content.Intent
 import android.content.SharedPreferences
-import android.media.MediaPlayer
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -14,11 +14,12 @@ import com.tt.gitmusic.R
 import com.tt.gitmusic.adapter.FilesAdapter
 import com.tt.gitmusic.databinding.ActivityFileBinding
 import com.tt.gitmusic.model.TreeX
+import com.tt.gitmusic.service.PlayMusic
 import com.tt.gitmusic.viewmodel.GithubViewModel
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
-class ViewFile : AppCompatActivity(){
+class ViewFile : AppCompatActivity() {
 
     private lateinit var binding: ActivityFileBinding
     private val githubViewModel by viewModel<GithubViewModel>()
@@ -26,7 +27,6 @@ class ViewFile : AppCompatActivity(){
 
     private var listFile: MutableList<TreeX> = ArrayList()
     private lateinit var filesAdapter: FilesAdapter
-    private lateinit var mediaPlayer: MediaPlayer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,7 +43,7 @@ class ViewFile : AppCompatActivity(){
         val token = sharedPreferences.getString("token", "")
 
         if (token != null) {
-            githubViewModel.getLastCommit(token, userName, repoName, sha)
+            githubViewModel.getLastCommit(token, userName!!, repoName!!, sha!!)
             githubViewModel.commitDetail.observe(this, Observer {
                 githubViewModel.getFileInBranch(token, it.commit.tree.url)
             })
@@ -76,8 +76,13 @@ class ViewFile : AppCompatActivity(){
                 val intent = Intent(this@ViewFile, PlayMusic::class.java)
                 intent.putExtra("token", token)
                 intent.putExtra("url", url)
-                intent.action = "com.example.action.PLAY"
-                startService(intent)
+                intent.putExtra("name", listFile[position].path.substringBefore("."))
+                intent.action = PlayMusic.ACTION_PLAY
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
             }
         })
 
