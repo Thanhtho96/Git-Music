@@ -8,6 +8,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.net.wifi.WifiManager
@@ -15,17 +17,17 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.support.v4.media.session.MediaSessionCompat
-import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.tt.gitmusic.R
 import com.tt.gitmusic.receiver.MusicReceiver
 
-
-class PlayMusic : MediaPlayer.OnPreparedListener, Service() {
+class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudioFocusChangeListener {
 
     private var mMediaPlayer: MediaPlayer? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private lateinit var uri: Uri
+    private lateinit var headerMap: HashMap<String, String>
 
     companion object {
         const val ACTION_PLAY: String = "com.tt.music.action.PLAY"
@@ -41,11 +43,11 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service() {
         val action = intent.action
         val token = intent.getStringExtra("token")
         val name = intent.getStringExtra("name")
-        val uri = Uri.parse(intent.getStringExtra("url"))
-        val map: HashMap<String, String> = HashMap()
+        uri = Uri.parse(intent.getStringExtra("url"))
+        headerMap = HashMap()
         if (token != null) {
-            map["Authorization"] = token
-            map["Accept"] = "application/vnd.github.v3.raw+json"
+            headerMap["Authorization"] = token
+            headerMap["Accept"] = "application/vnd.github.v3.raw+json"
         }
 
         when (action) {
@@ -57,58 +59,49 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service() {
                         mMediaPlayer?.stop()
                     }
                 }
-                mMediaPlayer = MediaPlayer() // initialize it here
-                mMediaPlayer?.apply {
-                    wifiLock?.acquire()
-                    setDataSource(this@PlayMusic, uri, map)
-                    setWakeMode(this@PlayMusic, PowerManager.PARTIAL_WAKE_LOCK)
-                    setOnPreparedListener(this@PlayMusic)
-                    prepareAsync() // prepare async to not block main thread
-                }
-
-                Log.d("mediaPlayer", "${mMediaPlayer?.duration}")
+                initMediaPlayer(uri, headerMap)
 
                 val mediaSession = MediaSessionCompat(this@PlayMusic, "GitMusicSession")
 
                 createNotificationChannel("Music", "Play music", "Music")
 
-                val intent1 = Intent(this, MusicReceiver::class.java)
-                intent1.action = ACTION_PREVIOUS
+                val intentPrev = Intent(this, MusicReceiver::class.java)
+                intentPrev.action = ACTION_PREVIOUS
 
                 val pdPrev = PendingIntent.getBroadcast(
                         this,
                         0,
-                        intent1,
+                        intentPrev,
                         PendingIntent.FLAG_UPDATE_CURRENT
                 )
 
-                val intent2 = Intent(this, MusicReceiver::class.java)
-                intent2.action = ACTION_PAUSE
+                val intentPause = Intent(this, MusicReceiver::class.java)
+                intentPause.action = ACTION_PAUSE
 
                 val pdPause = PendingIntent.getBroadcast(
                         this,
                         0,
-                        intent2,
+                        intentPause,
                         PendingIntent.FLAG_UPDATE_CURRENT
                 )
 
-                val intent3 = Intent(this, MusicReceiver::class.java)
-                intent3.action = ACTION_NEXT
+                val intentNext = Intent(this, MusicReceiver::class.java)
+                intentNext.action = ACTION_NEXT
 
                 val pdNext = PendingIntent.getBroadcast(
                         this,
                         0,
-                        intent3,
+                        intentNext,
                         PendingIntent.FLAG_UPDATE_CURRENT
                 )
 
-                val intent4 = Intent(this, MusicReceiver::class.java)
-                intent4.action = ACTION_STOP
+                val intentStop = Intent(this, MusicReceiver::class.java)
+                intentStop.action = ACTION_STOP
 
                 val pdStop = PendingIntent.getBroadcast(
                         this,
                         0,
-                        intent4,
+                        intentStop,
                         PendingIntent.FLAG_CANCEL_CURRENT
                 )
                 val builder = NotificationCompat.Builder(this, "Music")
@@ -127,9 +120,30 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service() {
 
                 startForeground(1, builder.build())
                 registerReceiver(broadcastReceiver, IntentFilter("MusicFilter"))
+
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
+                        AudioManager.AUDIOFOCUS_GAIN)
             }
+
         }
         return START_STICKY
+    }
+
+    private fun initMediaPlayer(uri: Uri,
+                                headerMap: HashMap<String, String>) {
+        mMediaPlayer = MediaPlayer() // initialize it here
+        mMediaPlayer?.apply {
+            wifiLock?.acquire()
+            setAudioAttributes(AudioAttributes.Builder().apply {
+                setUsage(AudioAttributes.USAGE_MEDIA)
+                setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            }.build())
+            setDataSource(this@PlayMusic, uri, headerMap)
+            setWakeMode(this@PlayMusic, PowerManager.PARTIAL_WAKE_LOCK)
+            setOnPreparedListener(this@PlayMusic)
+            prepareAsync() // prepare async to not block main thread
+        }
     }
 
     private var broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
@@ -171,5 +185,25 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service() {
         if (wifiLock?.isHeld!!)
             wifiLock?.release()
         stopSelf()
+    }
+
+    override fun onAudioFocusChange(focusChange: Int) {
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                if (mMediaPlayer == null) initMediaPlayer(uri, headerMap)
+                else if (!mMediaPlayer?.isPlaying!!) mMediaPlayer?.start()
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                if (mMediaPlayer?.isPlaying!!) mMediaPlayer?.stop()
+                mMediaPlayer?.release()
+                mMediaPlayer = null
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                if (mMediaPlayer?.isPlaying!!) mMediaPlayer?.pause()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                if (mMediaPlayer?.isPlaying!!) mMediaPlayer?.setVolume(0.1f, 0.1f)
+            }
+        }
     }
 }
