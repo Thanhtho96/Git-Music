@@ -17,17 +17,19 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.support.v4.media.session.MediaSessionCompat
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.tt.gitmusic.R
 import com.tt.gitmusic.receiver.MusicReceiver
 
 class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudioFocusChangeListener {
 
     private var mMediaPlayer: MediaPlayer? = null
-    private var wifiLock: WifiManager.WifiLock? = null
+    private lateinit var wifiLock: WifiManager.WifiLock
     private lateinit var uri: Uri
     private lateinit var headerMap: HashMap<String, String>
+    private lateinit var songName: String
+    private lateinit var audioManager: AudioManager
 
     companion object {
         const val ACTION_PLAY: String = "com.tt.music.action.PLAY"
@@ -40,9 +42,8 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
     override fun onStartCommand(intent: Intent,
                                 flags: Int,
                                 startId: Int): Int {
-        val action = intent.action
         val token = intent.getStringExtra("token")
-        val name = intent.getStringExtra("name")
+        songName = intent.getStringExtra("name")!!
         uri = Uri.parse(intent.getStringExtra("url"))
         headerMap = HashMap()
         if (token != null) {
@@ -50,91 +51,96 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
             headerMap["Accept"] = "application/vnd.github.v3.raw+json"
         }
 
-        when (action) {
-            ACTION_PLAY -> {
-                val wifiManager = this@PlayMusic.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "mylock")
-                if (mMediaPlayer != null) {
-                    if (mMediaPlayer!!.isPlaying) {
-                        mMediaPlayer?.stop()
-                    }
-                }
-                initMediaPlayer(uri, headerMap)
-
-                val mediaSession = MediaSessionCompat(this@PlayMusic, "GitMusicSession")
-
-                createNotificationChannel("Music", "Play music", "Music")
-
-                val intentPrev = Intent(this, MusicReceiver::class.java)
-                intentPrev.action = ACTION_PREVIOUS
-
-                val pdPrev = PendingIntent.getBroadcast(
-                        this,
-                        0,
-                        intentPrev,
-                        PendingIntent.FLAG_UPDATE_CURRENT
-                )
-
-                val intentPause = Intent(this, MusicReceiver::class.java)
-                intentPause.action = ACTION_PAUSE
-
-                val pdPause = PendingIntent.getBroadcast(
-                        this,
-                        0,
-                        intentPause,
-                        PendingIntent.FLAG_UPDATE_CURRENT
-                )
-
-                val intentNext = Intent(this, MusicReceiver::class.java)
-                intentNext.action = ACTION_NEXT
-
-                val pdNext = PendingIntent.getBroadcast(
-                        this,
-                        0,
-                        intentNext,
-                        PendingIntent.FLAG_UPDATE_CURRENT
-                )
-
-                val intentStop = Intent(this, MusicReceiver::class.java)
-                intentStop.action = ACTION_STOP
-
-                val pdStop = PendingIntent.getBroadcast(
-                        this,
-                        0,
-                        intentStop,
-                        PendingIntent.FLAG_CANCEL_CURRENT
-                )
-                val builder = NotificationCompat.Builder(this, "Music")
-                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                        .setSmallIcon(R.drawable.notification_icon)
-                        .setContentTitle(name)
-                        .addAction(R.drawable.ic_skip_previous_black_24dp, "Previous", pdPrev)
-                        .addAction(R.drawable.ic_pause_black_24dp, "Pause", pdPause)
-                        .addAction(R.drawable.ic_skip_next_black_24dp, "Next", pdNext)
-                        .addAction(R.drawable.ic_close_black_24dp, "Stop", pdStop)
-                        .setStyle(
-                                androidx.media.app.NotificationCompat.MediaStyle()
-                                        .setShowActionsInCompactView(0, 1, 2)
-                                        .setMediaSession(mediaSession.sessionToken)
-                        )
-
-                startForeground(1, builder.build())
-                registerReceiver(broadcastReceiver, IntentFilter("MusicFilter"))
-
-                val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
-                        AudioManager.AUDIOFOCUS_GAIN)
+        val wifiManager = this@PlayMusic.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "mylock")
+        mMediaPlayer?.let {
+            if (it.isPlaying) {
+                it.stop()
             }
-
         }
+        initMediaPlayer(uri, headerMap)
+
+        createNotificationChannel("Music", "Play music", "Music")
+
+        startForeground(1, buildNotification(songName, R.drawable.ic_pause_black_24dp, true).build())
+        registerReceiver(broadcastReceiver, IntentFilter("MusicFilter"))
+
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN)
+
         return START_STICKY
+    }
+
+    private fun buildNotification(songName: String?,
+                                  iconPlay: Int,
+                                  wantToPause: Boolean): NotificationCompat.Builder {
+        val mediaSession = MediaSessionCompat(this@PlayMusic, "GitMusicSession")
+
+        val intentPrev = Intent(this, MusicReceiver::class.java)
+        intentPrev.action = ACTION_PREVIOUS
+
+        val pdPrev = PendingIntent.getBroadcast(
+                this,
+                0,
+                intentPrev,
+                PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val intentPause = Intent(this, MusicReceiver::class.java)
+        if (wantToPause) {
+            intentPause.action = ACTION_PAUSE
+        } else {
+            intentPause.action = ACTION_PLAY
+        }
+
+        val pdPause = PendingIntent.getBroadcast(
+                this,
+                0,
+                intentPause,
+                PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val intentNext = Intent(this, MusicReceiver::class.java)
+        intentNext.action = ACTION_NEXT
+
+        val pdNext = PendingIntent.getBroadcast(
+                this,
+                0,
+                intentNext,
+                PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val intentStop = Intent(this, MusicReceiver::class.java)
+        intentStop.action = ACTION_STOP
+
+        val pdStop = PendingIntent.getBroadcast(
+                this,
+                0,
+                intentStop,
+                PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        return NotificationCompat.Builder(this, "Music")
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setSmallIcon(R.drawable.notification_icon)
+                .setContentTitle(songName)
+                .addAction(R.drawable.ic_skip_previous_black_24dp, "Previous", pdPrev)
+                .addAction(iconPlay, "Pause", pdPause)
+                .addAction(R.drawable.ic_skip_next_black_24dp, "Next", pdNext)
+                .addAction(R.drawable.ic_close_black_24dp, "Stop", pdStop)
+                .setStyle(
+                        androidx.media.app.NotificationCompat.MediaStyle()
+                                .setShowActionsInCompactView(0, 1, 2)
+                                .setMediaSession(mediaSession.sessionToken)
+                )
     }
 
     private fun initMediaPlayer(uri: Uri,
                                 headerMap: HashMap<String, String>) {
         mMediaPlayer = MediaPlayer() // initialize it here
         mMediaPlayer?.apply {
-            wifiLock?.acquire()
+            wifiLock.acquire()
             setAudioAttributes(AudioAttributes.Builder().apply {
                 setUsage(AudioAttributes.USAGE_MEDIA)
                 setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -149,11 +155,44 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
     private var broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?,
                                intent: Intent?) {
-            if (intent?.getStringExtra("Action").equals(ACTION_STOP))
-                onDestroy()
-            else
-                Toast.makeText(context, intent?.getStringExtra("Action"), Toast.LENGTH_SHORT)
-                        .show()
+            when (intent?.getStringExtra("Action")) {
+                ACTION_PLAY -> {
+                    if (mMediaPlayer == null)
+                        initMediaPlayer(uri, headerMap)
+                    else
+                        mMediaPlayer?.start()
+
+                    startForeground(1, buildNotification(songName, R.drawable.ic_pause_black_24dp, true).build())
+                }
+                ACTION_PAUSE -> {
+                    onPrepared(mMediaPlayer!!)
+                    mMediaPlayer?.pause()
+                    with(NotificationManagerCompat.from(this@PlayMusic)) {
+                        notify(1, buildNotification(songName, R.drawable.ic_play_arrow_black_24dp, false).build())
+                    }
+                }
+                ACTION_PREVIOUS -> {
+                    mMediaPlayer?.let {
+                        if (it.isPlaying) {
+                            it.stop()
+                        }
+                    }
+
+                    // Todo: add Prev
+                }
+                ACTION_NEXT -> {
+                    mMediaPlayer?.let {
+                        if (it.isPlaying) {
+                            it.stop()
+                        }
+                    }
+
+                    // Todo: add Next
+                }
+                ACTION_STOP -> {
+                    onDestroy()
+                }
+            }
         }
     }
 
@@ -182,8 +221,9 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
     override fun onDestroy() {
         super.onDestroy()
         mMediaPlayer?.release()
-        if (wifiLock?.isHeld!!)
-            wifiLock?.release()
+        audioManager.abandonAudioFocus(this)
+        if (wifiLock.isHeld)
+            wifiLock.release()
         stopSelf()
     }
 

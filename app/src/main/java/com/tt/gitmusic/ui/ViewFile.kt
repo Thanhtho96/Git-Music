@@ -14,6 +14,7 @@ import com.tt.gitmusic.R
 import com.tt.gitmusic.adapter.FilesAdapter
 import com.tt.gitmusic.databinding.ActivityFileBinding
 import com.tt.gitmusic.model.TreeX
+import com.tt.gitmusic.receiver.MusicReceiver
 import com.tt.gitmusic.service.PlayMusic
 import com.tt.gitmusic.viewmodel.GithubViewModel
 import org.koin.android.ext.android.inject
@@ -77,12 +78,14 @@ class ViewFile : AppCompatActivity() {
                 intent.putExtra("token", token)
                 intent.putExtra("url", url)
                 intent.putExtra("name", listFile[position].path.substringBefore("."))
-                intent.action = PlayMusic.ACTION_PLAY
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(intent)
                 } else {
                     startService(intent)
                 }
+                val intentPlay = Intent(this@ViewFile, MusicReceiver::class.java)
+                intentPlay.action = PlayMusic.ACTION_PLAY
+                sendBroadcast(intentPlay)
             }
         })
 
