@@ -14,7 +14,6 @@ import com.tt.gitmusic.R
 import com.tt.gitmusic.adapter.FilesAdapter
 import com.tt.gitmusic.databinding.ActivityFileBinding
 import com.tt.gitmusic.model.TreeX
-import com.tt.gitmusic.receiver.MusicReceiver
 import com.tt.gitmusic.service.PlayMusic
 import com.tt.gitmusic.viewmodel.GithubViewModel
 import org.koin.android.ext.android.inject
@@ -83,9 +82,10 @@ class ViewFile : AppCompatActivity() {
                 } else {
                     startService(intent)
                 }
-                val intentPlay = Intent(this@ViewFile, MusicReceiver::class.java)
-                intentPlay.action = PlayMusic.ACTION_PLAY
-                sendBroadcast(intentPlay)
+                Toast.makeText(
+                        this@ViewFile,
+                        "Loading speed depend on your network health and your file size",
+                        Toast.LENGTH_SHORT).show()
             }
         })
 
