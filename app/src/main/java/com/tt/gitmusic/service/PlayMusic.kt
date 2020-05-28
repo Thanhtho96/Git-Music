@@ -68,7 +68,12 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
             }
         }
 
-        stopForeground(true) // This remove notification of old song when you want play new song
+        title = "Loading.."
+        artist = "Loading.."
+        album = "Loading.."
+        duration = -1
+        bitmap = null
+        startForeground(1, buildNotification(R.drawable.ic_play_arrow_black_24dp).build())
         initMediaPlayer(uri, headerMap)
 
         createNotificationChannel("Music", "Play music", "Music")
