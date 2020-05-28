@@ -29,11 +29,12 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
 
     private var mMediaPlayer: MediaPlayer? = null
     private var metadataRetriever: MediaMetadataRetriever? = null
+    private var audioManager: AudioManager? = null
     private lateinit var wifiLock: WifiManager.WifiLock
     private lateinit var uri: Uri
     private lateinit var headerMap: HashMap<String, String>
     private lateinit var songName: String
-    private lateinit var audioManager: AudioManager
+    private lateinit var audioFocusRequest: AudioFocusRequest
     private var title: String? = null
     private var artist: String? = null
     private var album: String? = null
@@ -66,15 +67,13 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
                 it.release()
             }
         }
+
+        stopForeground(true) // This remove notification of old song when you want play new song
         initMediaPlayer(uri, headerMap)
 
         createNotificationChannel("Music", "Play music", "Music")
 
         registerReceiver(broadcastReceiver, IntentFilter("MusicFilter"))
-
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN)
 
         return START_STICKY
     }
@@ -211,6 +210,12 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
                                 notify(1, buildNotification(R.drawable.ic_play_arrow_black_24dp).build())
                             }
                         } else {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                audioManager?.requestAudioFocus(audioFocusRequest)
+                            } else {
+                                audioManager?.requestAudioFocus(this@PlayMusic, AudioManager.STREAM_MUSIC,
+                                        AudioManager.AUDIOFOCUS_GAIN)
+                            }
                             mMediaPlayer?.setVolume(1f, 1f)
                             mMediaPlayer?.start()
                             startForeground(1, buildNotification(R.drawable.ic_pause_black_24dp).build())
@@ -261,6 +266,24 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
 
     /** Called when MediaPlayer is ready */
     override fun onPrepared(mediaPlayer: MediaPlayer) {
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest = (AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(AudioAttributes.Builder().run {
+                        setUsage(AudioAttributes.USAGE_MEDIA)
+                        setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        build()
+                    })
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(this@PlayMusic)
+                    .build())
+
+            audioManager?.requestAudioFocus(audioFocusRequest)
+        } else {
+            audioManager?.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN)
+        }
+
         mediaPlayer.start()
         startForeground(1, buildNotification(R.drawable.ic_pause_black_24dp).build())
     }
@@ -270,7 +293,7 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
         stopForeground(true)
         mMediaPlayer?.release()
         metadataRetriever?.release()
-        audioManager.abandonAudioFocus(this)
+        audioManager?.abandonAudioFocus(this)
         if (wifiLock.isHeld)
             wifiLock.release()
         stopSelf()
@@ -279,25 +302,23 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
     override fun onAudioFocusChange(focusChange: Int) {
         when (focusChange) {
             AudioManager.AUDIOFOCUS_GAIN -> {
-                if (mMediaPlayer == null) {
-                    initMediaPlayer(uri, headerMap)
-                } else {
-                    mMediaPlayer?.setVolume(1f, 1f)
-                    mMediaPlayer?.start()
-                }
+                mMediaPlayer?.setVolume(1f, 1f)
+                mMediaPlayer?.start()
 
                 startForeground(1, buildNotification(R.drawable.ic_pause_black_24dp).build())
             }
             AudioManager.AUDIOFOCUS_LOSS -> {
-                if (mMediaPlayer?.isPlaying!!) mMediaPlayer?.pause()
+                mMediaPlayer?.pause()
+                stopForeground(false)
                 with(NotificationManagerCompat.from(this@PlayMusic)) {
                     notify(1, buildNotification(R.drawable.ic_play_arrow_black_24dp).build())
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                mMediaPlayer?.let {
-                    if (it.isPlaying)
-                        it.pause()
+                mMediaPlayer?.pause()
+                stopForeground(false)
+                with(NotificationManagerCompat.from(this@PlayMusic)) {
+                    notify(1, buildNotification(R.drawable.ic_play_arrow_black_24dp).build())
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
