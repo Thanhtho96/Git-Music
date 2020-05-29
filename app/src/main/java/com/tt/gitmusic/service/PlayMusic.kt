@@ -15,6 +15,8 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.tt.gitmusic.R
@@ -29,11 +31,13 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
     private var mMediaPlayer: MediaPlayer? = null
     private var metadataRetriever: MediaMetadataRetriever? = null
     private var audioManager: AudioManager? = null
+    private lateinit var mediaSession: MediaSessionCompat
     private lateinit var wifiLock: WifiManager.WifiLock
     private lateinit var uri: Uri
     private lateinit var headerMap: HashMap<String, String>
     private lateinit var songName: String
     private lateinit var audioFocusRequest: AudioFocusRequest
+    private lateinit var state: PlaybackStateCompat.Builder
     private var title: String? = null
     private var artist: String? = null
     private var album: String? = null
@@ -52,6 +56,9 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
             metadataRetriever = MediaMetadataRetriever()
         if (mMediaPlayer == null)
             mMediaPlayer = MediaPlayer()
+
+        mediaSession = MediaSessionCompat(this@PlayMusic, "GitMusicSession")
+        state = PlaybackStateCompat.Builder()
 
         val wifiManager = this@PlayMusic.getSystemService(Context.WIFI_SERVICE) as WifiManager
         wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "mylock")
@@ -97,12 +104,17 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
 
     private fun buildNotification(iconPlay: Int?,
                                   isInit: Boolean): NotificationCompat.Builder {
-        val mediaSession = MediaSessionCompat(this@PlayMusic, "GitMusicSession")
-        val metadata = MediaMetadataCompat.Builder().apply {
-            putBitmap(MediaMetadata.METADATA_KEY_ART, bitmap)
-        }
+        if (!isInit) {
+            mediaSession.apply {
+                val metadata = MediaMetadataCompat.Builder().apply {
+                    putBitmap(MediaMetadata.METADATA_KEY_ART, bitmap)
+                    putLong(MediaMetadata.METADATA_KEY_DURATION, mMediaPlayer?.duration!!.toLong())
+                }
+                setMetadata(metadata.build())
+                setPlaybackState(state.build())
+            }
 
-        mediaSession.setMetadata(metadata.build())
+        }
 
         val intentPrev = Intent(this, MusicReceiver::class.java)
         intentPrev.action = ACTION_PREVIOUS
@@ -165,7 +177,8 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
         artist = "Loading.."
         album = "Loading.."
         duration = -1
-        bitmap = null
+        bitmap = BitmapFactory.decodeResource(applicationContext.resources,
+                R.drawable.ic_note);
         startForeground(1, buildNotification(null, true).build())
 
         GlobalScope.launch(Dispatchers.IO) {
@@ -180,12 +193,6 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
                         ?: "Unknown"
                 album = extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
                         ?: "Unknown"
-                val du = extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION).toLong()
-                duration = if (du == 0L) {
-                    -1
-                } else {
-                    du
-                }
 
                 withContext(Dispatchers.Main) {
                     mMediaPlayer?.apply {
@@ -200,6 +207,20 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
                         setDataSource(this@PlayMusic, uri, headerMap)
                         setWakeMode(this@PlayMusic, PowerManager.PARTIAL_WAKE_LOCK)
                         setOnPreparedListener(this@PlayMusic)
+                        setOnInfoListener { mp, what, extra ->
+                            if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) {
+                                Toast.makeText(this@PlayMusic, "Network lost, can't play", Toast.LENGTH_SHORT).show()
+                                onDestroy()
+                            }
+                            true
+                        }
+                        setOnErrorListener { mp, what, extra ->
+                            if (what == MediaPlayer.MEDIA_ERROR_UNKNOWN) {
+                                Toast.makeText(this@PlayMusic, "Network lost, can't play", Toast.LENGTH_SHORT).show()
+                                onDestroy()
+                            }
+                            true
+                        }
                         prepareAsync() // prepare async to not block main thread
                     }
                 }
@@ -215,6 +236,9 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
                     if (mMediaPlayer?.isPlaying!!) {
                         mMediaPlayer?.pause()
                         stopForeground(false)
+                        state.apply {
+                            setState(PlaybackStateCompat.STATE_PAUSED, mMediaPlayer?.currentPosition!!.toLong(), 1F)
+                        }
                         with(NotificationManagerCompat.from(this@PlayMusic)) {
                             notify(1, buildNotification(R.drawable.ic_play_arrow_black_24dp, false).build())
                         }
@@ -227,6 +251,9 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
                         }
                         mMediaPlayer?.setVolume(1f, 1f)
                         mMediaPlayer?.start()
+                        state.apply {
+                            setState(PlaybackStateCompat.STATE_PLAYING, mMediaPlayer?.currentPosition!!.toLong(), 1F)
+                        }
                         startForeground(1, buildNotification(R.drawable.ic_pause_black_24dp, false).build())
                     }
                 }
@@ -284,6 +311,9 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
         }
 
         mediaPlayer.start()
+        state.apply {
+            setState(PlaybackStateCompat.STATE_PLAYING, mMediaPlayer?.currentPosition!!.toLong(), 1F)
+        }
         startForeground(1, buildNotification(R.drawable.ic_pause_black_24dp, false).build())
     }
 
@@ -292,6 +322,7 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
         stopForeground(true)
         mMediaPlayer?.release()
         metadataRetriever?.release()
+        mediaSession.release()
         audioManager?.abandonAudioFocus(this)
         if (wifiLock.isHeld)
             wifiLock.release()
@@ -303,11 +334,16 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
             AudioManager.AUDIOFOCUS_GAIN -> {
                 mMediaPlayer?.setVolume(1f, 1f)
                 mMediaPlayer?.start()
-
+                state.apply {
+                    setState(PlaybackStateCompat.STATE_PLAYING, mMediaPlayer?.currentPosition!!.toLong(), 1F)
+                }
                 startForeground(1, buildNotification(R.drawable.ic_pause_black_24dp, false).build())
             }
             AudioManager.AUDIOFOCUS_LOSS -> {
                 mMediaPlayer?.pause()
+                state.apply {
+                    setState(PlaybackStateCompat.STATE_PAUSED, mMediaPlayer?.currentPosition!!.toLong(), 1F)
+                }
                 stopForeground(false)
                 with(NotificationManagerCompat.from(this@PlayMusic)) {
                     notify(1, buildNotification(R.drawable.ic_play_arrow_black_24dp, false).build())
@@ -315,6 +351,9 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                 mMediaPlayer?.pause()
+                state.apply {
+                    setState(PlaybackStateCompat.STATE_PAUSED, mMediaPlayer?.currentPosition!!.toLong(), 1F)
+                }
                 stopForeground(false)
                 with(NotificationManagerCompat.from(this@PlayMusic)) {
                     notify(1, buildNotification(R.drawable.ic_play_arrow_black_24dp, false).build())

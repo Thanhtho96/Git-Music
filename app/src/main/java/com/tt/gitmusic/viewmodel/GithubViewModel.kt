@@ -1,5 +1,8 @@
 package com.tt.gitmusic.viewmodel
 
+import android.app.Application
+import android.widget.Toast
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,7 +16,7 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class GithubViewModel(private val githubDao: GithubDao) : ViewModel() {
+class GithubViewModel(application: Application, private val githubDao: GithubDao) : AndroidViewModel(application) {
 
     var listRepos: MutableLiveData<List<UserRepo>> = MutableLiveData()
     var listBranches: MutableLiveData<List<BranchItem>> = MutableLiveData()
@@ -30,7 +33,7 @@ class GithubViewModel(private val githubDao: GithubDao) : ViewModel() {
 
                 override fun onFailure(call: Call<List<UserRepo>>,
                                        t: Throwable) {
-                    TODO("Not yet implemented")
+                    Toast.makeText(getApplication(), "Network is down", Toast.LENGTH_SHORT).show()
                 }
             })
         }
@@ -48,7 +51,7 @@ class GithubViewModel(private val githubDao: GithubDao) : ViewModel() {
 
                 override fun onFailure(call: Call<List<BranchItem>>,
                                        t: Throwable) {
-                    TODO("Not yet implemented")
+                    Toast.makeText(getApplication(), "Network is down", Toast.LENGTH_SHORT).show()
                 }
             })
         }
@@ -67,7 +70,7 @@ class GithubViewModel(private val githubDao: GithubDao) : ViewModel() {
 
                 override fun onFailure(call: Call<CommitDetail>,
                                        t: Throwable) {
-                    TODO("Not yet implemented")
+                    Toast.makeText(getApplication(), "Network is down", Toast.LENGTH_SHORT).show()
                 }
             })
         }
@@ -84,7 +87,7 @@ class GithubViewModel(private val githubDao: GithubDao) : ViewModel() {
 
                 override fun onFailure(call: Call<FileInBranch>,
                                        t: Throwable) {
-                    TODO("Not yet implemented")
+                    Toast.makeText(getApplication(), "Network is down", Toast.LENGTH_SHORT).show()
                 }
             })
         }

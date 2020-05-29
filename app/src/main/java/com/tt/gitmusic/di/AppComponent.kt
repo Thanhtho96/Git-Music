@@ -19,7 +19,7 @@ val appComponent = module {
     single { provideRetrofit() }
     single { provideGithubDao(get()) }
     single { providesSharedPreferences(get()) }
-    viewModel { GithubViewModel(get()) }
+    viewModel { GithubViewModel(get(), get()) }
 }
 
 fun getHttpLoggingInterceptor(): HttpLoggingInterceptor {

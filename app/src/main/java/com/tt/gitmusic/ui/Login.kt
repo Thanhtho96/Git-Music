@@ -72,7 +72,7 @@ class Login : AppCompatActivity() {
 
                     override fun onFailure(call: Call<AccessToken>,
                                            t: Throwable) {
-                        TODO("Not yet implemented")
+                        Toast.makeText(this@Login, "Network is down", Toast.LENGTH_SHORT).show()
                     }
                 })
             } else if (uri.getQueryParameter("error") != null) {
