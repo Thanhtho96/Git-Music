@@ -15,7 +15,6 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.tt.gitmusic.R
@@ -48,6 +47,21 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
         const val ACTION_STOP: String = "com.tt.music.action.STOP"
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        if (metadataRetriever == null)
+            metadataRetriever = MediaMetadataRetriever()
+        if (mMediaPlayer == null)
+            mMediaPlayer = MediaPlayer()
+
+        val wifiManager = this@PlayMusic.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "mylock")
+
+        createNotificationChannel("Music", "Play music", "Music")
+
+        registerReceiver(broadcastReceiver, IntentFilter("MusicFilter"))
+    }
+
     override fun onStartCommand(intent: Intent,
                                 flags: Int,
                                 startId: Int): Int {
@@ -60,12 +74,9 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
             headerMap["Accept"] = "application/vnd.github.v3.raw"
         }
 
-        val wifiManager = this@PlayMusic.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "mylock")
-        mMediaPlayer?.let {
-            if (it.isPlaying) {
-                it.release()
-            }
+        mMediaPlayer?.apply {
+            stop()
+            reset()
         }
 
         title = "Loading.."
@@ -75,10 +86,6 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
         bitmap = null
         startForeground(1, buildNotification(R.drawable.ic_play_arrow_black_24dp).build())
         initMediaPlayer(uri, headerMap)
-
-        createNotificationChannel("Music", "Play music", "Music")
-
-        registerReceiver(broadcastReceiver, IntentFilter("MusicFilter"))
 
         return START_STICKY
     }
@@ -153,26 +160,19 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
 
     private fun initMediaPlayer(uri: Uri,
                                 headerMap: HashMap<String, String>) {
-        if (metadataRetriever == null) {
-            metadataRetriever = MediaMetadataRetriever()
-        }
         GlobalScope.launch(Dispatchers.IO) {
             metadataRetriever?.apply {
                 setDataSource(uri.toString(), headerMap)
-            }
-
-            metadataRetriever?.let { metadata ->
-                bitmap = null
-                metadata.embeddedPicture?.let {
+                embeddedPicture?.let {
                     bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
                 }
-                title = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+                title = extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
                         ?: songName
-                artist = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                artist = extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
                         ?: "Unknown"
-                album = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+                album = extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
                         ?: "Unknown"
-                val du = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION).toLong()
+                val du = extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION).toLong()
                 duration = if (du == 0L) {
                     -1
                 } else {
@@ -180,8 +180,9 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
                 }
 
                 withContext(Dispatchers.Main) {
-                    mMediaPlayer = MediaPlayer() // initialize it here
                     mMediaPlayer?.apply {
+                        stop()
+                        reset()
                         wifiLock.acquire()
                         setAudioAttributes(AudioAttributes.Builder().apply {
                             setUsage(AudioAttributes.USAGE_MEDIA)
@@ -194,7 +195,6 @@ class PlayMusic : MediaPlayer.OnPreparedListener, Service(), AudioManager.OnAudi
                         prepareAsync() // prepare async to not block main thread
                     }
                 }
-                Log.d("metadata", "${title}||${artist}||${duration}||${album}")
             }
         }
     }
